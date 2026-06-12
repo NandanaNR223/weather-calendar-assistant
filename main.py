@@ -1,6 +1,9 @@
 import os
 import requests
 from dotenv import load_dotenv
+from rapidfuzz import fuzz
+from activity_similarity import classify_by_similarity
+from calendar_api import get_calendar_events
 
 load_dotenv()
 
@@ -17,6 +20,34 @@ ACTIVITY_RULES = {
     "football" : {"hot_temp" : 32, "wind_limit" : 30},
     "tennis" : {"hot_temp" : 32, "wind_limit" : 30},
     "gardening" : {"hot_temp" : 35, "wind_limit" : 25}
+}
+
+OUTDOOR_EXERCISE = {
+    "exercise" : [
+        "walk", "run", "jog", "hike", "bike", "cycling", "cardio", "training", "exercise", "workout"
+    ],
+    "outdoor_places" : [
+        "park", "beach", "trail", "campus", "picnic"
+    ]
+}
+
+ERRANDS = {
+    "shopping" : [
+        "grocery", "groceries", "shopping", "market", "store"
+    ],
+    "services" : [
+        "pharmacy", "bank", "post", "office", "laundry", "medicine", "prescription",
+        "medication"
+    ]
+}
+
+INDOOR = {
+    "appointments" : [
+        "meeting", "class", "doctor", "appointmet", "lecture"
+    ],
+    "indoor_places" : [
+        "gym", "library", "work", "study"
+    ]
 }
 
 def get_weather_data():
@@ -37,7 +68,37 @@ def get_forecast_for_time(hours, target_time):
     
     return None
 
-def generate_recommendation(activity, forecast):
+def fuzzy_match(word, keywords, threshold=75):
+    for keyword in keywords:
+        score = fuzz.ratio(word, keyword)
+
+        if score >= threshold:
+            return True
+        
+    return False
+
+def normalize_text(text):
+    text = text.lower().strip()
+    punctuation = [".",",","!","?",":",";","-","_"]
+    
+    for mark in punctuation:
+        text = text.replace(mark, " ")
+    
+    text = " ".join(text.split())
+    return text
+
+def classify_activity(activity):
+    result = classify_by_similarity(activity)
+
+    if result["best_match"] is not None:
+        print(f"\nMatched with: {result["best_match"]}")
+        print(f"Similarity score: {result["score"]:.2f}")
+    else:
+        print("No confident activity match found")
+    
+    return result["category"]
+
+def generate_recommendation(activity, activity_type, forecast):
     activity = activity.lower()
 
     rain_chance = forecast["chance_of_rain"]
@@ -47,10 +108,17 @@ def generate_recommendation(activity, forecast):
     if rain_chance >= 70:
         return f"It may rain during your {activity}. Carry rain gear or consider rescheduling."
 
-    if activity not in ACTIVITY_RULES:
-        return "Activity not recognized. Check weather details before heading out."
+    if activity_type == "outdoor":
+        rules = ACTIVITY_RULES["walk"]
     
-    rules = ACTIVITY_RULES[activity]
+    elif activity_type == "errand":
+        rules = ACTIVITY_RULES["walk"]
+    
+    elif activity_type == "indoor":
+        return "This looks like an indoor activity, so weather may not affect it much."
+    
+    else:
+        return "Activity not recognized. Check weather details before heading out."
 
     if temp_c >= rules["hot_temp"]:
         return f"It may be too hot for your {activity}. Carry water and stay hydrated."
@@ -60,31 +128,29 @@ def generate_recommendation(activity, forecast):
         
     return f"Weather looks fine for your {activity}."
 
-def main():
-    activity = input("Enter your activity: ").lower()
-    target_time = input("Enter a time in 24-hour format (HH:MM): ")
+def process_activity(activity, target_time, hours):
+    activity_type = classify_activity(activity)
+    forecast = get_forecast_for_time(hours, target_time)
 
-    if not is_valid_time_format(target_time):
-        print("Invalid time format. Please enter time like so - 17:00")
-        return
+    if forecast is None:
+        print(f"\n{activity} at {target_time}")
+        print("Sorry, I couldn't find weather data for that time.")
+        return 
     
+    recommendation = generate_recommendation(activity, activity_type, forecast)
+
+    print(f"\n{activity} at {target_time}")
+    print(f"Category: {activity_type}")
+    print(recommendation)
+
+def main():
     data = get_weather_data()
     hours = data["forecast"]["forecastday"][0]["hour"]
 
-    forecast = get_forecast_for_time(hours, target_time)
-
-    if forecast:
-        print(f"\nForecast for {target_time} in {CITY}:")
-        print(f"Temperature: {forecast["temp_c"]}°C")
-        print(f"Condition: {forecast["condition"]["text"]}")
-        print(f"Wind: {forecast["wind_kph"]} km/h")
-        print(f"Rain Chance: {forecast["chance_of_rain"]}%")
-        
-        recommendation = generate_recommendation(activity, forecast)
-        print(f"Recommendation: {recommendation}")
-
-    else:
-        print(f"No forecasr found {target_time}.")
+    calendar_events = get_calendar_events()
+    
+    for event in calendar_events:
+        process_activity(event["activity"], event["time"], hours)
 
 
 if __name__ == "__main__":

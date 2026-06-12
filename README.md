@@ -1,6 +1,6 @@
 # Weather Calendar Assitant
 
-A Python project that gives weather=based recommendations for planned activities.
+A Python project that gives weather-based recommendations for planned activities.
 
 ## Phase - I: Weather Recommendation Engine
 
