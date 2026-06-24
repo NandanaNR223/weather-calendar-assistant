@@ -9,7 +9,7 @@ This version allows the user to enter:
 - an activity
 - a time in 24-hour format
 
-the program then fetches live forecasr data and generates a recommendation.
+the program then fetches live forecast data and generates a recommendation.
 
 ## Example
 
